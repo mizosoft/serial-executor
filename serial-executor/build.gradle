@@ -1,2 +1,19 @@
 
 sourceCompatibility = JavaVersion.VERSION_11
+
+sourceSets {
+  guavaTest {
+    compileClasspath += sourceSets.main.output
+    runtimeClasspath += sourceSets.main.output
+  }
+}
+
+configurations {
+  guavaTestImplementation.extendsFrom implementation
+  guavaTestRuntimeOnly.extendsFrom runtimeOnly
+}
+
+dependencies {
+  guavaTestImplementation 'com.google.guava:guava-testlib:31.1-jre'
+  guavaTestImplementation 'com.google.truth:truth:1.1.3'
+}
