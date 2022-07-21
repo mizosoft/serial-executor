@@ -88,7 +88,7 @@ public final class SerialExecutor implements Executor {
   private volatile long sync;
 
   public SerialExecutor(Executor delegate) {
-    this.delegate = delegate;
+    this.delegate = requireNonNull(delegate);
   }
 
   @Override
@@ -192,8 +192,6 @@ public final class SerialExecutor implements Executor {
     return incrementedCount | stateBits;
   }
 
-  // For testing
-
   boolean isRunningBitSet() {
     return (sync & RUNNING) != 0;
   }
@@ -208,6 +206,25 @@ public final class SerialExecutor implements Executor {
 
   boolean isShutdownBitSet() {
     return (sync & SHUTDOWN) != 0;
+  }
+
+  boolean isKeepAliveBitSet() {
+    return (sync & KEEP_ALIVE) != 0;
+  }
+
+  @Override
+  public String toString() {
+    return "SerialExecutor@"
+        + Integer.toHexString(hashCode())
+        + "{delegate="
+        + delegate
+        + ", submitted="
+        + isSubmittedBitSet()
+        + ", running="
+        + isRunningBitSet()
+        + ", keepAlive="
+        + isKeepAliveBitSet()
+        + "}";
   }
 
   /**
