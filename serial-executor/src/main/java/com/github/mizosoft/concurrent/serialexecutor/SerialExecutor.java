@@ -26,8 +26,8 @@ import static java.util.Objects.requireNonNull;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.util.Deque;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RejectedExecutionException;
@@ -69,7 +69,7 @@ public final class SerialExecutor implements Executor {
   }
 
   private final Executor delegate;
-  private final Deque<Runnable> taskQueue = new ConcurrentLinkedDeque<>();
+  private final Queue<Runnable> taskQueue;
 
   /**
    * Field that maintains execution state at its first 4 MSBs along with the number of times the
@@ -88,7 +88,12 @@ public final class SerialExecutor implements Executor {
   private volatile long sync;
 
   public SerialExecutor(Executor delegate) {
+    this(delegate, new ConcurrentLinkedQueue<>());
+  }
+
+  public SerialExecutor(Executor delegate, Queue<Runnable> queue) {
     this.delegate = requireNonNull(delegate);
+    this.taskQueue = requireNonNull(queue);
   }
 
   @Override
@@ -101,7 +106,9 @@ public final class SerialExecutor implements Executor {
     var decoratedCommand = new RunnableDecorator(command);
     taskQueue.add(decoratedCommand);
 
-    for (long s = sync; ; ) {
+    while (true) {
+      long s = sync;
+
       // If drainTaskQueue has been submitted, but is yet to run, it'll surely see the added task.
       if ((s & (SUBMITTED | RUNNING)) == SUBMITTED) {
         return;
@@ -120,8 +127,7 @@ public final class SerialExecutor implements Executor {
           SYNC.compareAndSet(this, s, s | SUBMITTED);
         } catch (RuntimeException | Error e) {
           boolean removed =
-              ((s & (SUBMITTED | RUNNING)) == 0)
-                  && taskQueue.removeLastOccurrence(decoratedCommand);
+              ((s & (SUBMITTED | RUNNING)) == 0) && taskQueue.remove(decoratedCommand);
           if (!(e instanceof RejectedExecutionException) || removed) {
             throw e;
           }
@@ -145,10 +151,12 @@ public final class SerialExecutor implements Executor {
       return; // Another drain won the race.
     }
 
+    boolean interrupted = false;
     while (true) {
       var task = taskQueue.poll();
       if (task != null) {
         try {
+          interrupted |= Thread.interrupted();
           task.run();
         } catch (Throwable t) {
           // Before propagating that to delegate's thread, try to reschedule ourselves if we still
@@ -168,8 +176,12 @@ public final class SerialExecutor implements Executor {
         // Exit or consume KEEP_ALIVE bit. Don't forget to also unset SUBMITTED if exiting.
         long s = sync;
         long unsetBits = (s & KEEP_ALIVE) != 0 ? KEEP_ALIVE : (RUNNING | SUBMITTED);
-        if (SYNC.compareAndSet(this, s, incrementDrainCount(s) & ~unsetBits)
+        if (SYNC.weakCompareAndSet(
+                this, s, (((unsetBits & RUNNING) != 0) ? incrementDrainCount(s) : s) & ~unsetBits)
             && (unsetBits & RUNNING) != 0) {
+          if (interrupted) {
+            Thread.currentThread().interrupt();
+          }
           return;
         }
       }
@@ -178,8 +190,8 @@ public final class SerialExecutor implements Executor {
 
   /** Atomically sets the {@link #RUNNING} bit, returning true if successful. */
   private boolean acquireRun() {
-    long s = (long) SYNC.getAndBitwiseOr(this, RUNNING);
-    return (s & RUNNING) == 0;
+    return ((sync & RUNNING) == 0)
+        && ((((long) SYNC.getAndBitwiseOr(this, RUNNING)) & RUNNING) == 0);
   }
 
   /** Returns {@code s} with an incremented drain count and existing state bits. */
