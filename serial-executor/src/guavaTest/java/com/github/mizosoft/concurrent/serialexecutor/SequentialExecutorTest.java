@@ -146,7 +146,8 @@ public class SequentialExecutorTest extends TestCase {
     assertEquals(ImmutableList.of(0, 1, 2), callOrder);
   }
 
-  public void testRuntimeException_doesNotStopExecution() {
+  /** Unlike SequentialExecutor, SerialExecutor rethrows exceptions thrown by executing tasks. */
+  public void disabled_testRuntimeException_doesNotStopExecution() {
 
     final AtomicInteger numCalls = new AtomicInteger();
 
@@ -391,7 +392,9 @@ public class SequentialExecutorTest extends TestCase {
             return "my runnable's toString";
           }
         });
-    assertThat(whileRunningToString[0]).contains("my runnable's toString");
+
+    // SerialExecutor doesn't track the current task to produce it in toString
+    // disabled_assertThat(whileRunningToString[0]).contains("my runnable's toString");
   }
 
   private static Executor newSequentialExecutor(Executor delegate) {
