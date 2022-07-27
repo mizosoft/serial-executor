@@ -1,4 +1,4 @@
 rootProject.name = 'serial-executor-parent'
 
 include 'serial-executor'
-//include 'benchmarks'
+include 'benchmarks'

@@ -1,0 +1,36 @@
+plugins {
+  id 'com.github.johnrengelman.shadow' version '7.1.2'
+}
+
+dependencies {
+  implementation project(':serial-executor')
+  annotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.35'
+  implementation 'org.openjdk.jmh:jmh-core:1.35'
+  implementation 'com.google.guava:guava:31.1-jre'
+}
+
+jar {
+  manifest {
+    attributes 'Main-Class': 'org.openjdk.jmh.Main'
+  }
+}
+
+task jmh(type: JavaExec) {
+  classpath = files(shadowJar)
+  args('-foe', 'true')
+  def additionalArgs = System.properties.jmhArgs
+  if (additionalArgs) {
+    if (additionalArgs.length() > 2
+        && additionalArgs.startsWithAny("'", '"')
+        && additionalArgs.endsWithAny("'", '"')) {
+      additionalArgs = additionalArgs[1..additionalArgs.length() - 1]
+    }
+    args additionalArgs
+  }
+}
+
+//tasks.withType(JavaCompile) {
+//  options.errorprone {
+//    excludedPaths = '.*/build/generated/.*' // jmh generated code makes errorprone go nuts
+//  }
+//}
